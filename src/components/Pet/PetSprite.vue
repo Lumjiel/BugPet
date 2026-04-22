@@ -93,13 +93,13 @@ const petImage = computed(() => {
 
 const gifSrc = computed(() => {
   if (props.pet === 'bugcat' && (props.level === 2 || props.level === 3)) {
-    return `/pets/bugcat-level${props.level}.gif?t=${Date.now()}`;
+    return `/pets/bugcat-level${props.level}.gif`;
   }
   if (props.pet === 'trae' && props.state === 'chaotic' && !isFrightened.value) {
-    return `/pets/trae-level3.gif?t=${Date.now()}`;
+    return `/pets/trae-level3.gif`;
   }
   if ((props.pet === 'codex' || props.pet === 'claudecode') && !isFrightened.value && props.state === 'chaotic') {
-    return `/pets/${props.pet}-level3.gif?t=${Date.now()}`;
+    return `/pets/${props.pet}-level3.gif`;
   }
   return '';
 });
@@ -146,8 +146,6 @@ function playGifAnimation() {
 function scheduleGifAnimation() {
   if (props.pet !== 'bugcat' || props.level === 1 || isFrightened.value) return;
   if (gifScheduleTimer !== null) return;
-
-  currentGifUrl = `/pets/bugcat-level${props.level}.gif?t=${Date.now()}`;
 
   const delay = 5000 + Math.random() * 5000;
   gifScheduleTimer = window.setTimeout(() => {
