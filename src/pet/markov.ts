@@ -2,8 +2,9 @@ import { idleCorpus } from './corpus/idle';
 import { watchingCorpus } from './corpus/watching';
 import { focusedCorpus } from './corpus/focused';
 import { chaoticCorpus } from './corpus/chaotic';
+import { desktopCorpus } from './corpus/desktop';
 
-export type PetState = 'idle' | 'watching' | 'focused' | 'chaotic';
+export type PetState = 'idle' | 'watching' | 'focused' | 'chaotic' | 'desktop';
 
 interface WeightedToken {
   token: string;
@@ -29,7 +30,8 @@ class WeightedMarkovChain {
       idle: ['静止', '屏幕', '刷视频', '留守', '抖音', '没人', '桌面', '图标', '寂寞', '手机', '傻笑', '发呆', '摸鱼'],
       watching: ['盯', '康康', '这行', '抽象', '命名', '看不懂', '瞳孔', '嗅觉', 'bug', '震撼', '消化', '注释', '瞪'],
       focused: ['Tab', '丝滑', '手速', '键盘', '心流', '回车', '光', '闪电', '输出', '神', '节奏', '代码', '键'],
-      chaotic: ['窗口', 'Alt', '切', '晕', '风暴', '甩', '旋转', '切屏', '报错', '炸', '多线程', '洗衣机', '切换']
+      chaotic: ['窗口', 'Alt', '切', '晕', '风暴', '甩', '旋转', '切屏', '报错', '炸', '多线程', '洗衣机', '切换'],
+      desktop: ['桌面', '图标', '窗口', '关闭', 'Win', '壁纸', '任务栏', '快捷', '空白', '干净', '寂寞', '孤独', '等待']
     };
 
     const lower = token.toLowerCase();
@@ -134,14 +136,16 @@ const messageGenerators = {
   idle: new WeightedMarkovChain(idleCorpus, 'idle'),
   watching: new WeightedMarkovChain(watchingCorpus, 'watching'),
   focused: new WeightedMarkovChain(focusedCorpus, 'focused'),
-  chaotic: new WeightedMarkovChain(chaoticCorpus, 'chaotic')
+  chaotic: new WeightedMarkovChain(chaoticCorpus, 'chaotic'),
+  desktop: new WeightedMarkovChain(desktopCorpus, 'desktop')
 };
 
 const corpusMap: Record<PetState, string[]> = {
   idle: idleCorpus,
   watching: watchingCorpus,
   focused: focusedCorpus,
-  chaotic: chaoticCorpus
+  chaotic: chaoticCorpus,
+  desktop: desktopCorpus
 };
 
 class MessageManager {

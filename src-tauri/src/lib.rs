@@ -1,6 +1,5 @@
 use windows::{
     Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId},
-    Win32::Graphics::Gdi::{GetDC, ReleaseDC, GetDeviceCaps},
     Win32::System::SystemInformation::GetTickCount,
     Win32::System::Threading::{
         OpenProcess,
@@ -12,7 +11,12 @@ use windows::{
 };
 
 use serde::{Deserialize, Serialize};
-use tauri::Manager;
+use tauri::{
+    Manager,
+    menu::{Menu, MenuItem},
+    tray::{TrayIconBuilder, MouseButton, MouseButtonState, TrayIconEvent},
+    image::Image,
+};
 use log::info;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -36,6 +40,7 @@ pub struct ActivityInfo {
     pub frontmost_window_title: String,
     pub idle_seconds: u32,
     pub is_coding_app: bool,
+    pub is_showing_desktop: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -122,6 +127,16 @@ fn is_coding_app(app_name: &str) -> bool {
     coding_apps.iter().any(|app| lower.contains(&app.to_lowercase()))
 }
 
+fn is_showing_desktop() -> bool {
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        let mut title = [0u16; 512];
+        let len = GetWindowTextW(hwnd, &mut title);
+        let title_str = String::from_utf16_lossy(&title[..len as usize]);
+        title_str.is_empty() || title_str == "Program Manager"
+    }
+}
+
 #[tauri::command]
 fn get_foreground_app() -> ForegroundAppResult {
     let window_info = get_foreground_window_info();
@@ -142,15 +157,17 @@ fn get_activity_info() -> ActivityInfo {
     let app_name = get_process_name(window_info.process_id);
     let idle_seconds = get_idle_seconds();
     let is_coding = is_coding_app(&app_name);
+    let showing_desktop = is_showing_desktop();
 
-    info!("Activity: app={}, title={}, idle={}s, coding={}",
-          app_name, window_info.title, idle_seconds, is_coding);
+    info!("Activity: app={}, title={}, idle={}s, coding={}, desktop={}",
+          app_name, window_info.title, idle_seconds, is_coding, showing_desktop);
 
     ActivityInfo {
         frontmost_app_name: app_name,
         frontmost_window_title: window_info.title,
         idle_seconds,
         is_coding_app: is_coding,
+        is_showing_desktop: showing_desktop,
     }
 }
 
@@ -259,6 +276,23 @@ fn get_main_window_rect() -> Result<(i32, i32, i32, i32), String> {
     }
 }
 
+fn load_tray_icon(app: &tauri::App) -> Result<Image<'static>, Box<dyn std::error::Error>> {
+    let icon_path = "icons/bugcat.png";
+
+    let img = if let Ok(img) = image::open(icon_path) {
+        img.resize(32, 32, image::imageops::FilterType::Triangle)
+    } else {
+        let fallback_bytes = include_bytes!("../icons/bugcat.png");
+        image::load_from_memory(fallback_bytes)?.resize(32, 32, image::imageops::FilterType::Triangle)
+    };
+
+    let rgba = img.to_rgba8();
+    let (width, height) = rgba.dimensions();
+    let raw_data = rgba.into_raw();
+
+    Ok(Image::new_owned(raw_data, width, height))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
@@ -273,6 +307,53 @@ pub fn run() {
             info!("BugPet setup complete");
             let window = app.get_webview_window("main").unwrap();
             window.set_ignore_cursor_events(false).ok();
+
+            let show_item = MenuItem::with_id(app, "show", "显示宠物", true, None::<&str>)?;
+            let hide_item = MenuItem::with_id(app, "hide", "隐藏宠物", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+
+            let menu = Menu::with_items(app, &[&show_item, &hide_item, &quit_item])?;
+
+            let tray_icon = load_tray_icon(app)?;
+
+            let _tray = TrayIconBuilder::new()
+                .icon(tray_icon)
+                .menu(&menu)
+                .tooltip("BugPet - 点击显示/隐藏宠物")
+                .on_menu_event(|app, event| {
+                    match event.id.as_ref() {
+                        "show" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                window.show().ok();
+                                window.set_focus().ok();
+                            }
+                        }
+                        "hide" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                window.hide().ok();
+                            }
+                        }
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            if window.is_visible().unwrap_or(false) {
+                                window.hide().ok();
+                            } else {
+                                window.show().ok();
+                                window.set_focus().ok();
+                            }
+                        }
+                    }
+                })
+                .build(app)?;
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

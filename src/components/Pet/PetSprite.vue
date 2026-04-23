@@ -2,7 +2,7 @@
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue';
 
 const props = defineProps<{
-  state: 'idle' | 'watching' | 'focused' | 'chaotic';
+  state: 'idle' | 'watching' | 'focused' | 'chaotic' | 'desktop';
   pet: 'bugcat' | 'trae' | 'codex' | 'claudecode';
   level: number;
   isDragging?: boolean;
@@ -20,7 +20,7 @@ const isGifPlaying = ref(false);
 let gifScheduleTimer: number | null = null;
 const GIF_DURATION = 1500;
 const gifKey = ref(0);
-let currentGifUrl = '';
+let _currentGifUrl = '';
 
 watch(() => props.isDragging, (dragging) => {
   if (dragging) {
@@ -49,6 +49,7 @@ const petImage = computed(() => {
       watching: 2,
       focused: 3,
       chaotic: 2,
+      desktop: 1,
     };
     const displayLevel = stateLevelMap[props.state] || 1;
     if (props.level === 1 && idleFrameIndex.value > 0) {
@@ -62,6 +63,7 @@ const petImage = computed(() => {
       watching: 2,
       focused: 1,
       chaotic: 3,
+      desktop: 1,
     };
     const displayLevel = stateLevelMap[props.state] || 1;
     if (isFrightened.value) {
@@ -78,6 +80,7 @@ const petImage = computed(() => {
       watching: 2,
       focused: 1,
       chaotic: 3,
+      desktop: 1,
     };
     const displayLevel = stateLevelMap[props.state] || 1;
     if (isFrightened.value) {
@@ -91,7 +94,7 @@ const petImage = computed(() => {
   return `/pets/${props.pet}-level${props.level}.gif`;
 });
 
-const gifSrc = computed(() => {
+const _gifSrc = computed(() => {
   if (props.pet === 'bugcat' && (props.level === 2 || props.level === 3)) {
     return `/pets/bugcat-level${props.level}.gif`;
   }

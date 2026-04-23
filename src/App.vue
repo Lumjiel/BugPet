@@ -155,13 +155,13 @@ function saveCodingStats() {
   localStorage.setItem('bugpet_total_seconds', totalCodingSeconds.value.toString())
 }
 
-function trackAppSwitch(appName: string, isCodingApp: boolean) {
+function trackAppSwitch(appName: string, _isCodingApp: boolean) {
   const normalized = appName.trim().toLowerCase()
   if (!normalized || normalized.includes('bugpet')) {
     return
   }
 
-  if (lastTrackedApp && normalized !== lastTrackedApp && isCodingApp) {
+  if (lastTrackedApp && normalized !== lastTrackedApp) {
     switchTimestamps.push(Date.now())
   }
 
@@ -174,7 +174,19 @@ function trackAppSwitch(appName: string, isCodingApp: boolean) {
   }
 }
 
-function resolveState(idleTime: number, appCategory: 'idle' | 'watching' | 'focused'): PetState {
+let chaoticEndTime: number | null = null
+const CHAOTIC_MIN_DURATION = 10000 // chaotic 状态最少持续 10 秒
+
+function resolveState(idleTime: number, appCategory: 'idle' | 'watching' | 'focused', isChaotic: boolean, isShowingDesktop: boolean): PetState {
+  if (isShowingDesktop) {
+    return 'desktop'
+  }
+
+  if (isChaotic && chaoticEndTime && Date.now() < chaoticEndTime) {
+    return 'chaotic'
+  }
+  chaoticEndTime = null
+
   if (idleTime >= 60 || appCategory === 'idle') {
     return 'idle'
   }
@@ -184,6 +196,7 @@ function resolveState(idleTime: number, appCategory: 'idle' | 'watching' | 'focu
   }
 
   if (switchTimestamps.length >= 8) {
+    chaoticEndTime = Date.now() + CHAOTIC_MIN_DURATION
     return 'chaotic'
   }
 
@@ -198,6 +211,7 @@ let activityInterval: number | null = null
 interface ActivityResult {
   app: string;
   idleTime: number;
+  isShowingDesktop?: boolean;
 }
 
 const dragMessages: Record<string, Record<number, { zh: string[]; en: string[] }>> = {
@@ -308,24 +322,23 @@ function getAppCategory(app: string): 'focused' | 'watching' | 'idle' {
   return 'watching'
 }
 
-function isCodingApp(app: string): boolean {
-  return getAppCategory(app) === 'focused'
-}
+
 
 let speechCooldown: number | null = null
 let lastSpeechMessage = ''
 const SPEECH_COOLDOWNS: Record<string, number> = {
-  focused: 30000,
-  idle: 10000,
-  chaotic: 60000,
-  watching: 5000
+  focused: 15000,
+  idle: 5000,
+  chaotic: 3000,
+  watching: 10000
 }
 
 const stateLabels: Record<string, { zh: string; en: string }> = {
   idle: { zh: '摸鱼', en: 'Idle' },
   watching: { zh: '围观', en: 'Watching' },
   focused: { zh: '专注', en: 'Focused' },
-  chaotic: { zh: '混乱', en: 'Chaotic' }
+  chaotic: { zh: '混乱', en: 'Chaotic' },
+  desktop: { zh: '桌面', en: 'Desktop' }
 }
 
 function shouldShowSpeech(state: PetState, idleSeconds: number, isCodingApp: boolean, stateChanged: boolean): boolean {
@@ -342,6 +355,8 @@ function shouldShowSpeech(state: PetState, idleSeconds: number, isCodingApp: boo
       return isCodingApp
     case 'watching':
       return !isCodingApp
+    case 'desktop':
+      return true
     default:
       return false
   }
@@ -385,15 +400,16 @@ function updatePetState(newState: PetState, idleSeconds: number = 0, isCodingApp
 
 async function fetchActivity() {
   try {
-    const result = await invoke<ActivityResult>('get_foreground_app')
-    currentApp.value = getPlatformName(result.app)
+    const result = await invoke<{ frontmost_app_name: string; idle_seconds: number; is_coding_app: boolean; is_showing_desktop: boolean }>('get_activity_info')
+    currentApp.value = getPlatformName(result.frontmost_app_name)
     localStorage.setItem('bugpet_current_app', currentApp.value)
 
-    const appCategory = getAppCategory(result.app)
-    const idleTime = result.idleTime || 0
+    const appCategory = getAppCategory(result.frontmost_app_name)
+    const idleTime = result.idle_seconds || 0
+    const isShowingDesktop = result.is_showing_desktop || false
 
-    trackAppSwitch(result.app, appCategory === 'focused')
-    const newState = resolveState(idleTime, appCategory)
+    trackAppSwitch(result.frontmost_app_name, appCategory === 'focused')
+    const newState = resolveState(idleTime, appCategory, switchTimestamps.length >= 8, isShowingDesktop)
 
     updatePetState(newState, idleTime, appCategory === 'focused')
 
@@ -408,7 +424,7 @@ async function fetchActivity() {
       currentApp.value = 'VS Code'
       localStorage.setItem('bugpet_current_app', currentApp.value)
       trackAppSwitch('code', true)
-      const newState = resolveState(0, 'focused')
+      const newState = resolveState(0, 'focused', false, false)
       updatePetState(newState, 0, true)
       statusText.value = `${stateLabels[newState][language.value]} · VS Code`
     }
