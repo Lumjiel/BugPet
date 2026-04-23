@@ -54,6 +54,9 @@ const displayMessage = computed(() => props.message || '');
   word-break: break-word;
   max-height: 120px;
   overflow: hidden;
+  -webkit-line-clamp: 3;       /* 最多显示3行 */
+  -webkit-box-orient: vertical;
+  text-overflow: ellipsis;
 }
 
 .bubble-tail {

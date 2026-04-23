@@ -4,9 +4,9 @@ import { invoke } from '@tauri-apps/api/core'
 import PetSprite from './components/Pet/PetSprite.vue'
 import SpeechBubble from './components/Pet/SpeechBubble.vue'
 import ControlPanel from './components/Panel/ControlPanel.vue'
+import { getPetMessage, type PetState } from './pet'
 
 type PetType = 'bugcat' | 'trae' | 'codex' | 'claudecode'
-type PetState = 'idle' | 'watching' | 'focused' | 'chaotic'
 
 const petState = ref<PetState>('idle')
 const selectedPet = ref<PetType>('bugcat')
@@ -59,7 +59,11 @@ function loadGrowthData() {
   if (storedLevel) level.value = parseInt(storedLevel, 10)
   if (storedFocusedMs) focusedMsCarry.value = parseInt(storedFocusedMs, 10)
   if (storedChaoticMs) chaoticMsCarry.value = parseInt(storedChaoticMs, 10)
-  level.value = 3
+
+  const storedPet = localStorage.getItem('bugpet_pet') as PetType
+  if (storedPet && ['bugcat', 'trae', 'codex', 'claudecode'].includes(storedPet)) {
+    selectedPet.value = storedPet
+  }
 }
 
 function saveGrowthData() {
@@ -170,12 +174,12 @@ function trackAppSwitch(appName: string, isCodingApp: boolean) {
   }
 }
 
-function resolveState(idleTime: number, isCodingApp: boolean): PetState {
-  if (idleTime >= 60) {
+function resolveState(idleTime: number, appCategory: 'idle' | 'watching' | 'focused'): PetState {
+  if (idleTime >= 60 || appCategory === 'idle') {
     return 'idle'
   }
 
-  if (!isCodingApp) {
+  if (appCategory === 'watching') {
     return 'watching'
   }
 
@@ -194,25 +198,6 @@ let activityInterval: number | null = null
 interface ActivityResult {
   app: string;
   idleTime: number;
-}
-
-const petMessages: Record<string, { zh: string[]; en: string[] }> = {
-  idle: {
-    zh: ['在想什么呢~', '休息一下也好', '好无聊啊...', '动一动吧！'],
-    en: ['What are you thinking?', 'Taking a break is nice~', 'So boring...', 'Let\'s move!']
-  },
-  watching: {
-    zh: ['发现你了！', '你在看什么呀？', '👀 盯...', '嘿！'],
-    en: ['I found you!', 'What are you looking at?', '👀 Staring...', 'Hey!']
-  },
-  focused: {
-    zh: ['加油写代码！', '很棒哦~', '💻 努力中', '继续继续！'],
-    en: ['Keep coding!', 'You\'re doing great~', '💻 Working hard', 'Keep going!']
-  },
-  chaotic: {
-    zh: ['好忙啊!', '切换太快了!', '头晕了...', '慢一点!'],
-    en: ['So busy!', 'Switching too fast!', 'So dizzy...', 'Slow down!']
-  }
 }
 
 const dragMessages: Record<string, Record<number, { zh: string[]; en: string[] }>> = {
@@ -292,6 +277,9 @@ const platformMessages: Record<string, { zh: string; en: string }> = {
   emacs: { zh: 'Emacs', en: 'Emacs' },
   cursor: { zh: 'Cursor', en: 'Cursor' },
   trae: { zh: 'Trae', en: 'Trae' },
+  explorer: { zh: '桌面', en: 'Desktop' },
+  sodamusic: { zh: '汽水音乐', en: 'Soda Music' },
+  douyin: { zh: '抖音', en: 'Douyin' },
 }
 
 function getPlatformName(app: string): string {
@@ -304,37 +292,52 @@ function getPlatformName(app: string): string {
   return app
 }
 
-function isCodingApp(app: string): boolean {
-  const codingApps = ['code', 'devenv', 'rider', 'idea', 'webstorm', 'pycharm', 'goland', 'clion', 'androidstudio', 'sublime_text', 'atom', 'notepad++', 'vim', 'emacs', 'cursor', 'trae']
+const appCategories = {
+  focused: ['cursor', 'windsurf', 'trae', 'kiro', 'antigravity', 'code', 'idea64', 'pycharm64', 'webstorm64', 'clion64', 'rider64', 'goland64', 'claude', 'devenv', 'rider', 'idea', 'webstorm', 'pycharm', 'goland', 'clion', 'androidstudio', 'sublime_text', 'atom', 'notepad++', 'vim', 'emacs'],
+  watching: ['chrome', 'msedge', 'firefox', 'Acrobat', 'FoxitReader', 'wordpad', 'notepad', 'obsidian'],
+  idle: ['抖音', 'TikTok', '快手', 'bilibili', 'steam', 'wechat', 'QQ', 'cloudmusic', 'potplayer', 'explorer', 'sodamusic', 'douyin'],
+}
+
+function getAppCategory(app: string): 'focused' | 'watching' | 'idle' {
   const lower = app.toLowerCase()
-  return codingApps.some(codingApp => lower.includes(codingApp))
+  for (const cat of ['focused', 'watching', 'idle'] as const) {
+    if (appCategories[cat].some(key => lower.includes(key))) {
+      return cat
+    }
+  }
+  return 'watching'
+}
+
+function isCodingApp(app: string): boolean {
+  return getAppCategory(app) === 'focused'
 }
 
 let speechCooldown: number | null = null
 let lastSpeechMessage = ''
 const SPEECH_COOLDOWNS: Record<string, number> = {
-  focused: 65000,
-  idle: 100000,
-  chaotic: 45000,
-  watching: 75000
+  focused: 30000,
+  idle: 10000,
+  chaotic: 60000,
+  watching: 5000
 }
 
 const stateLabels: Record<string, { zh: string; en: string }> = {
-  idle: { zh: '空闲', en: 'Idle' },
+  idle: { zh: '摸鱼', en: 'Idle' },
   watching: { zh: '围观', en: 'Watching' },
   focused: { zh: '专注', en: 'Focused' },
   chaotic: { zh: '混乱', en: 'Chaotic' }
 }
 
 function shouldShowSpeech(state: PetState, idleSeconds: number, isCodingApp: boolean, stateChanged: boolean): boolean {
-  if (stateChanged) return true
   if (speechCooldown) return false
+  if (speechVisible.value) return false
+  if (stateChanged) return true
 
   switch (state) {
     case 'focused':
       return isCodingApp && idleSeconds < 10
     case 'idle':
-      return idleSeconds >= 120
+      return true
     case 'chaotic':
       return isCodingApp
     case 'watching':
@@ -349,8 +352,7 @@ function showSpeech() {
     return
   }
 
-  const msgs = petMessages[petState.value][language.value]
-  const newMessage = msgs[Math.floor(Math.random() * msgs.length)]
+  const newMessage = getPetMessage(petState.value)
 
   if (newMessage === lastSpeechMessage && Math.random() > 0.3) {
     return
@@ -368,7 +370,7 @@ function showSpeech() {
     speechCooldown = window.setTimeout(() => {
       speechCooldown = null
     }, SPEECH_COOLDOWNS[petState.value] || 5000)
-  }, 5000)
+  }, 3000)
 }
 
 function updatePetState(newState: PetState, idleSeconds: number = 0, isCodingApp: boolean = true) {
@@ -387,16 +389,16 @@ async function fetchActivity() {
     currentApp.value = getPlatformName(result.app)
     localStorage.setItem('bugpet_current_app', currentApp.value)
 
+    const appCategory = getAppCategory(result.app)
     const idleTime = result.idleTime || 0
-    const isCoding = isCodingApp(result.app)
 
-    trackAppSwitch(result.app, isCoding)
-    const newState = resolveState(idleTime, isCoding)
+    trackAppSwitch(result.app, appCategory === 'focused')
+    const newState = resolveState(idleTime, appCategory)
 
-    updatePetState(newState, idleTime, isCoding)
+    updatePetState(newState, idleTime, appCategory === 'focused')
 
     if (newState === 'idle') {
-      statusText.value = ''
+      statusText.value = currentApp.value ? `${stateLabels[newState][language.value]} · ${currentApp.value}` : ''
     } else {
       statusText.value = currentApp.value ? `${stateLabels[newState][language.value]} · ${currentApp.value}` : ''
     }
@@ -406,7 +408,7 @@ async function fetchActivity() {
       currentApp.value = 'VS Code'
       localStorage.setItem('bugpet_current_app', currentApp.value)
       trackAppSwitch('code', true)
-      const newState = resolveState(0, true)
+      const newState = resolveState(0, 'focused')
       updatePetState(newState, 0, true)
       statusText.value = `${stateLabels[newState][language.value]} · VS Code`
     }
@@ -421,7 +423,7 @@ function handleMouseEnter() {
     }
     speechTimeout = window.setTimeout(() => {
       speechVisible.value = false
-    }, 5000)
+    }, 3000)
   }
 }
 
@@ -592,7 +594,7 @@ function handleClickOutside(e: MouseEvent) {
 
 .pet-area {
   position: absolute;
-  top: 120px;
+  top: 150px;
   width: 76px;
   height: 100px;
   left: 50%;

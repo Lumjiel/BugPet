@@ -276,6 +276,11 @@ defineExpose({ handleMouseUp });
   to { opacity: 1; }
 }
 
+@keyframes idle-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
 @keyframes fear-shake {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-4px); }
