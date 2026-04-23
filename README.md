@@ -19,7 +19,6 @@
 
 > 安装包及后续发布版本请访问：
 > **https://github.com/Lumjiel/BugPet/releases**
-> *（macOS 原版官网：[bp.eiddie.top](https://bp.eiddie.top)）*
 
 ---
 
