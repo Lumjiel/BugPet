@@ -24,12 +24,13 @@ const todoInput = ref('');
 const contributionDays = ref<ContributionDay[]>([]);
 const editingId = ref<string | null>(null);
 const editingText = ref('');
-const showBatchActions = ref(false);
+const _showBatchActions = ref(false);
+const hideBorder = ref(false);
 
 const doneTodos = computed(() => todos.value.filter(t => t.isDone));
-const pendingTodos = computed(() => todos.value.filter(t => !t.isDone));
-const hasDoneTodos = computed(() => doneTodos.value.length > 0);
-const hasTodos = computed(() => todos.value.length > 0);
+const _pendingTodos = computed(() => todos.value.filter(t => !t.isDone));
+const _hasDoneTodos = computed(() => doneTodos.value.length > 0);
+const _hasTodos = computed(() => todos.value.length > 0);
 
 const emit = defineEmits<{
   (e: 'close'): void;
@@ -40,6 +41,7 @@ const emit = defineEmits<{
   (e: 'toggleTodo', id: string): void;
   (e: 'deleteTodo', id: string): void;
   (e: 'updateTodoInput', value: string): void;
+  (e: 'changeHideBorder', hide: boolean): void;
 }>();
 
 const activeTab = ref<'overview' | 'todos' | 'pet'>('overview');
@@ -104,11 +106,12 @@ const t = computed(() => ({
   editingPlaceholder: language.value === 'zh' ? '输入待办内容...' : 'Enter todo...',
   cancel: language.value === 'zh' ? '取消' : 'Cancel',
   confirm: language.value === 'zh' ? '确认' : 'OK',
+  hideBorder: language.value === 'zh' ? '隐藏边框' : 'Hide Border',
 }));
 
 const currentYear = new Date().getFullYear();
 
-function close() {
+function _close() {
   emit('close');
 }
 
@@ -120,6 +123,11 @@ function changeLanguage(lang: 'zh' | 'en') {
 function changeTheme(newTheme: 'light' | 'dark') {
   theme.value = newTheme;
   localStorage.setItem('bugpet_theme', newTheme);
+}
+
+function changeHideBorder(hide: boolean) {
+  hideBorder.value = hide;
+  localStorage.setItem('bugpet_hide_border', hide ? '1' : '0');
 }
 
 function selectPet(pet: string) {
@@ -152,7 +160,7 @@ function deleteTodo(id: string) {
   saveTodos();
 }
 
-function deleteDoneTodos() {
+function _deleteDoneTodos() {
   todos.value = todos.value.filter(t => !t.isDone);
   saveTodos();
 }
@@ -195,6 +203,7 @@ function loadFromStorage() {
   theme.value = (localStorage.getItem('bugpet_theme') as 'light' | 'dark') || 'light';
   selectedPet.value = localStorage.getItem('bugpet_pet') || 'bugcat';
   currentApp.value = localStorage.getItem('bugpet_current_app') || '';
+  hideBorder.value = localStorage.getItem('bugpet_hide_border') === '1';
 
   const storedTodos = localStorage.getItem('bugpet_todos');
   if (storedTodos) {
@@ -312,6 +321,9 @@ onMounted(() => {
             <div class="stat-value-small">{{ totalMinutes }}</div>
             <div class="stat-label">{{ t.total }}</div>
           </div>
+        </div>
+
+        <div class="stats-row">
         </div>
 
         <div class="panel-section heatmap-section">
@@ -446,6 +458,26 @@ onMounted(() => {
             </button>
           </div>
         </div>
+
+        <div class="panel-section">
+          <div class="section-label">{{ t.hideBorder }}</div>
+          <div class="toggle-wrapper">
+            <button
+              class="toggle-btn"
+              :class="{ active: !hideBorder }"
+              @click="changeHideBorder(false)"
+            >
+              ✦
+            </button>
+            <button
+              class="toggle-btn"
+              :class="{ active: hideBorder }"
+              @click="changeHideBorder(true)"
+            >
+              ✧
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -455,9 +487,12 @@ onMounted(() => {
 .control-panel {
   display: flex;
   flex-direction: column;
-  width: 100%;            /* 占满窗口宽度 */
-  height: 380px;           /* 固定高度 */
+  width: 100%;
+  height: 380px;
   overflow: hidden;
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 /* ===== 滚动条 ===== */
@@ -1055,6 +1090,31 @@ onMounted(() => {
   width: 24px;
   height: 24px;
   object-fit: contain;
+}
+
+.toggle-wrapper {
+  display: flex;
+  gap: 6px;
+}
+
+.toggle-btn {
+  padding: 5px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.dark .toggle-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.toggle-btn.active {
+  border-color: #ff6633;
+  background: rgba(255, 102, 51, 0.1);
 }
 
 .dark .pet-name {

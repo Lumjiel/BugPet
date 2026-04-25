@@ -18,6 +18,7 @@ const statusText = ref('')
 const theme = ref<'light' | 'dark'>('light')
 const language = ref<'zh' | 'en'>('zh')
 const panelVisible = ref(false)
+const hideBorder = ref(false)
 const xp = ref(0)
 const level = ref(2)
 const focusedMsCarry = ref(0)
@@ -29,6 +30,7 @@ const switchTimestamps: number[] = []
 interface ContributionDay {
   date: string;
   focusedSeconds?: number;
+  watchingSeconds?: number;
 }
 const contributionDays = ref<ContributionDay[]>([])
 const todayCodingSeconds = ref(0)
@@ -64,6 +66,8 @@ function loadGrowthData() {
   if (storedPet && ['bugcat', 'trae', 'codex', 'claudecode'].includes(storedPet)) {
     selectedPet.value = storedPet
   }
+
+  hideBorder.value = localStorage.getItem('bugpet_hide_border') === '1'
 }
 
 function saveGrowthData() {
@@ -74,8 +78,6 @@ function saveGrowthData() {
 }
 
 function updateGrowth(state: PetState, isCodingApp: boolean) {
-  if (!isCodingApp) return
-
   const now = Date.now()
   const elapsed = Math.min(now - lastTickAt, 10000)
   lastTickAt = now
@@ -84,9 +86,11 @@ function updateGrowth(state: PetState, isCodingApp: boolean) {
     focusedMsCarry.value += elapsed
   } else if (state === 'chaotic') {
     chaoticMsCarry.value += elapsed
+  } else if (state === 'watching') {
+    focusedMsCarry.value += Math.floor(elapsed * 0.3)
   }
 
-  recordCodingStats(isCodingApp, state === 'focused')
+  recordCodingStats(isCodingApp, state === 'focused', state === 'watching')
 
   const focusedXP = Math.floor(focusedMsCarry.value / CONSTANTS.focusedInterval)
   const chaoticXP = Math.floor(chaoticMsCarry.value / CONSTANTS.chaoticInterval)
@@ -101,12 +105,12 @@ function updateGrowth(state: PetState, isCodingApp: boolean) {
   }
 }
 
-function recordCodingStats(isCodingApp: boolean, isFocused: boolean) {
+function recordCodingStats(isCodingApp: boolean, isFocused: boolean, isWatching: boolean) {
   const now = Date.now()
   const elapsed = Math.min(now - lastCodingSampleAt, 10000)
   lastCodingSampleAt = now
 
-  if (!isCodingApp || elapsed <= 0) return
+  if (elapsed <= 0) return
 
   const today = new Date()
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
@@ -124,8 +128,12 @@ function recordCodingStats(isCodingApp: boolean, isFocused: boolean) {
     dayData = { date: todayKey, focusedSeconds: 0 }
     contributionDays.value.push(dayData)
   }
-  dayData.focusedSeconds = (dayData.focusedSeconds || 0) + Math.floor(elapsed / 1000)
-  if (isFocused) {
+
+  if (isFocused && isCodingApp) {
+    dayData.focusedSeconds = (dayData.focusedSeconds || 0) + Math.floor(elapsed / 1000)
+    todayCodingSeconds.value += elapsed
+  } else if (isWatching) {
+    dayData.watchingSeconds = (dayData.watchingSeconds || 0) + Math.floor(elapsed / 1000)
     todayCodingSeconds.value += elapsed
   }
   totalCodingSeconds.value += elapsed
@@ -140,6 +148,9 @@ function loadCodingStats() {
       if (!d.focusedSeconds && (d as any).focusedMinutes) {
         d.focusedSeconds = (d as any).focusedMinutes * 60
         ;(d as any).focusedMinutes = undefined
+      }
+      if (!d.watchingSeconds) {
+        d.watchingSeconds = 0
       }
     })
   }
@@ -207,12 +218,6 @@ let lastDragX = 0
 let lastDragY = 0
 let speechTimeout: number | null = null
 let activityInterval: number | null = null
-
-interface ActivityResult {
-  app: string;
-  idleTime: number;
-  isShowingDesktop?: boolean;
-}
 
 const dragMessages: Record<string, Record<number, { zh: string[]; en: string[] }>> = {
   bugcat: {
@@ -308,13 +313,13 @@ function getPlatformName(app: string): string {
 
 const appCategories = {
   focused: ['cursor', 'windsurf', 'trae', 'kiro', 'antigravity', 'code', 'idea64', 'pycharm64', 'webstorm64', 'clion64', 'rider64', 'goland64', 'claude', 'devenv', 'rider', 'idea', 'webstorm', 'pycharm', 'goland', 'clion', 'androidstudio', 'sublime_text', 'atom', 'notepad++', 'vim', 'emacs'],
-  watching: ['chrome', 'msedge', 'firefox', 'Acrobat', 'FoxitReader', 'wordpad', 'notepad', 'obsidian'],
-  idle: ['抖音', 'TikTok', '快手', 'bilibili', 'steam', 'wechat', 'QQ', 'cloudmusic', 'potplayer', 'explorer', 'sodamusic', 'douyin'],
+  watching: ['chrome', 'msedge', 'firefox', 'Acrobat', 'FoxitReader', 'wordpad', 'notepad', 'obsidian', 'explorer', 'wechat', 'QQ'],
+  idle: ['抖音', 'TikTok', '快手', 'bilibili', 'steam', 'cloudmusic', 'potplayer', 'sodamusic', 'douyin', '网易云', '音乐', '腾讯视频', '爱奇艺', '优酷'],
 }
 
 function getAppCategory(app: string): 'focused' | 'watching' | 'idle' {
   const lower = app.toLowerCase()
-  for (const cat of ['focused', 'watching', 'idle'] as const) {
+  for (const cat of ['idle', 'focused', 'watching'] as const) {
     if (appCategories[cat].some(key => lower.includes(key))) {
       return cat
     }
@@ -335,7 +340,7 @@ const SPEECH_COOLDOWNS: Record<string, number> = {
 
 const stateLabels: Record<string, { zh: string; en: string }> = {
   idle: { zh: '摸鱼', en: 'Idle' },
-  watching: { zh: '围观', en: 'Watching' },
+  watching: { zh: '阅读', en: 'Reading' },
   focused: { zh: '专注', en: 'Focused' },
   chaotic: { zh: '混乱', en: 'Chaotic' },
   desktop: { zh: '桌面', en: 'Desktop' }
@@ -524,7 +529,6 @@ onUnmounted(() => {
   document.removeEventListener('mousemove', handleDragMove)
   document.removeEventListener('mouseup', handleDragEnd)
   document.removeEventListener('click', handleClickOutside)
-
   if (activityInterval) {
     clearInterval(activityInterval)
   }
@@ -548,16 +552,24 @@ function handleClickOutside(e: MouseEvent) {
     @mouseenter="handleMouseEnter"
     @contextmenu="handleContextMenu"
   >
+    <!-- 控制面板 -->
     <div class="panel-area" v-if="panelVisible">
-      <ControlPanel @close="panelVisible = false" @select-pet="(pet) => selectedPet = pet as PetType" />
+      <ControlPanel
+        @close="panelVisible = false"
+        @select-pet="(pet) => selectedPet = pet as PetType"
+        @change-hide-border="(hide) => hideBorder = hide"
+      />
     </div>
 
+    <!-- 语音气泡 -->
     <SpeechBubble :message="speechMessage" :visible="speechVisible && !panelVisible" />
 
-    <div class="status-card" v-if="statusText && !panelVisible">
+    <!-- 状态卡：彻底无白色边框 -->
+    <div class="status-card" :class="{ 'no-border': hideBorder }" v-if="statusText && !panelVisible">
       {{ statusText }}
     </div>
 
+    <!-- 宠物精灵 -->
     <div class="pet-area" v-if="!panelVisible">
       <PetSprite
         :state="petState"
@@ -571,24 +583,36 @@ function handleClickOutside(e: MouseEvent) {
 </template>
 
 <style scoped>
+/* 主容器：彻底清除所有边框/阴影/轮廓 */
 .app-container {
   width: 220px;
   height: 252px;
-  background: transparent;
+  background: transparent !important;
   position: relative;
   display: flex;
   flex-direction: column;
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
+/* 面板：无多余边框/描边 */
 .panel-area {
   width: 270px;
   max-height: 380px;
   z-index: 10;
-  background: rgba(233, 226, 226, 0.98);
-  border-radius: 12px;
+  background: rgba(233, 226, 226, 0.95);
+  border-radius: 0;
   overflow-y: auto;
+  border: none !important;
+  outline: none !important;
+  box-shadow:
+    0 0 30px rgba(0, 0, 0, 0.06),
+    0 0 60px rgba(0, 0, 0, 0.04),
+    0 0 100px rgba(0, 0, 0, 0.03);
 }
 
+/* 状态卡：默认无白色边框 */
 .status-card {
   position: absolute;
   top: 4px;
@@ -598,7 +622,7 @@ function handleClickOutside(e: MouseEvent) {
   height: 24px;
   background: rgba(0, 0, 0, 0.72);
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: none !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -606,8 +630,15 @@ function handleClickOutside(e: MouseEvent) {
   font-weight: 600;
   color: rgba(255, 255, 255, 0.94);
   z-index: 2;
+  outline: none !important;
 }
 
+/* 隐藏边框模式：更简洁 */
+.status-card.no-border {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+/* 宠物区域 */
 .pet-area {
   position: absolute;
   top: 150px;

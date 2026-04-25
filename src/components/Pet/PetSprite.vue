@@ -20,7 +20,7 @@ const isGifPlaying = ref(false);
 let gifScheduleTimer: number | null = null;
 const GIF_DURATION = 1500;
 const gifKey = ref(0);
-let _currentGifUrl = '';
+const _currentGifUrl = '';
 
 watch(() => props.isDragging, (dragging) => {
   if (dragging) {
@@ -92,19 +92,6 @@ const petImage = computed(() => {
     return `/pets/${props.pet}-level${displayLevel}.png`;
   }
   return `/pets/${props.pet}-level${props.level}.gif`;
-});
-
-const _gifSrc = computed(() => {
-  if (props.pet === 'bugcat' && (props.level === 2 || props.level === 3)) {
-    return `/pets/bugcat-level${props.level}.gif`;
-  }
-  if (props.pet === 'trae' && props.state === 'chaotic' && !isFrightened.value) {
-    return `/pets/trae-level3.gif`;
-  }
-  if ((props.pet === 'codex' || props.pet === 'claudecode') && !isFrightened.value && props.state === 'chaotic') {
-    return `/pets/${props.pet}-level3.gif`;
-  }
-  return '';
 });
 
 function startIdleAnimation() {

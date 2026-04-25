@@ -1,5 +1,7 @@
 use windows::{
-    Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId},
+    Win32::UI::WindowsAndMessaging::{
+        GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId,
+    },
     Win32::System::SystemInformation::GetTickCount,
     Win32::System::Threading::{
         OpenProcess,
@@ -176,6 +178,8 @@ fn get_idle_time() -> u32 {
     get_idle_seconds()
 }
 
+
+
 #[tauri::command]
 fn get_process_path(process_id: u32) -> Result<String, String> {
     unsafe {
@@ -276,7 +280,7 @@ fn get_main_window_rect() -> Result<(i32, i32, i32, i32), String> {
     }
 }
 
-fn load_tray_icon(app: &tauri::App) -> Result<Image<'static>, Box<dyn std::error::Error>> {
+fn load_tray_icon(_app: &tauri::App) -> Result<Image<'static>, Box<dyn std::error::Error>> {
     let icon_path = "icons/bugcat.png";
 
     let img = if let Ok(img) = image::open(icon_path) {
